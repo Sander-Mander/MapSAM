@@ -55,9 +55,10 @@ class RandomGenerator(object):
 
 
 class hm_dataset(Dataset):
-    def __init__(self, base_dir, split, transform=None):
+    def __init__(self, base_dir, split, has_annotations=True, transform=None):
         self.transform = transform  # using transform in torch!
         self.split = split
+        self.has_annotations = has_annotations
         self.img_dir = os.path.join(base_dir, split)
         self.label_dir = os.path.join(base_dir, 'annotation', split)
         self.file_names = os.listdir(os.path.join(base_dir, split))
@@ -67,14 +68,19 @@ class hm_dataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = os.path.join(self.img_dir, self.file_names[idx])
-        label_path = os.path.join(self.label_dir, self.file_names[idx])
         image = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-        label = cv2.imread(label_path, cv2.IMREAD_UNCHANGED)
         image = np.transpose(image, (2, 0, 1)) / 255.0  # c,h,w
-        label = label/255
-
-        sample = {'image': image, 'label': label}
+        
+        if self.has_annotations:
+            label_path = os.path.join(self.label_dir, self.file_names[idx])
+            label = cv2.imread(label_path, cv2.IMREAD_UNCHANGED)
+            label = label/255
+            sample = {'image': image, 'label': label}
+        else:
+            sample = {'image': image}
+            
         if self.transform:
             sample = self.transform(sample)
+            
         sample['case_name'] = self.file_names[idx][:-4]
         return sample

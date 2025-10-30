@@ -30,7 +30,11 @@ def calculate_metric(pred_array, gt_array):
 
 def test_single_volume(image, label, net, classes, multimask_output, patch_size=[256, 256], input_size=[224, 224],
                        test_save_path=None, case=None):
-    image, label = image.squeeze(0).cpu().detach().numpy(), label.squeeze(0).cpu().detach().numpy()
+    image = image.squeeze(0).cpu().detach().numpy()
+    
+    if label is not None:
+        label = label.squeeze(0).cpu().detach().numpy()  
+        
     if len(image.shape) == 3:
         x, y = image.shape[1], image.shape[2]
         if x != input_size[0] or y != input_size[1]:
@@ -69,14 +73,20 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
             prediction = out.cpu().detach().numpy()
             if x != patch_size[0] or y != patch_size[1]:
                 prediction = zoom(prediction, (x / patch_size[0], y / patch_size[1]), order=0)
-    metric_list = []
-    for i in range(1, classes + 1):
-        metric_list.append(calculate_metric(prediction, label))
+    
+    if label is not None:
+        metric_list = []
+        for i in range(1, classes + 1):
+            metric_list.append(calculate_metric(prediction, label))
+    else:
+        metric_list = None
 
     if test_save_path is not None:
         prediction_uint8 = (prediction * 255).astype(np.uint8)
-        label_uint8 = (label * 255).astype(np.uint8)
         cv2.imwrite(test_save_path + '/' + case + "_pred.png", prediction_uint8)
-        cv2.imwrite(test_save_path + '/' + case + "_gt.png", label_uint8)
+
+        if label is not None:
+            label_uint8 = (label * 255).astype(np.uint8)
+            cv2.imwrite(test_save_path + '/' + case + "_gt.png", label_uint8)
 
     return metric_list
