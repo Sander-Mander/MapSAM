@@ -16,31 +16,45 @@ from datasets.dataset_hm import hm_dataset
 
 
 def inference(args, multimask_output, db_config, model, test_save_path=None):
-    db_test = db_config['Dataset'](base_dir=args.root_path, split='test')
+    has_annotations = not args.no_annotations
+    db_test = db_config['Dataset'](base_dir=args.root_path, split='test', has_annotations=has_annotations)
     testloader = DataLoader(db_test, batch_size=1, shuffle=False, num_workers=1)
     logging.info(f'{len(testloader)} test iterations per epoch')
     model.eval()
-    metric_list = 0.0
+    
+    if has_annotations:
+        metric_list = 0.0
+        
     for i_batch, sampled_batch in tqdm(enumerate(testloader)):
         h, w = sampled_batch['image'].shape[2:]
-        image, label, case_name = sampled_batch['image'], sampled_batch['label'], sampled_batch['case_name'][0]
-        metric_i = test_single_volume(image, label, model, classes=args.num_classes, multimask_output=multimask_output,
-                                      patch_size=[args.img_size, args.img_size], input_size=[args.input_size, args.input_size],
-                                      test_save_path=test_save_path, case=case_name)
-        metric_list += np.array(metric_i)
-        logging.info('idx %d case %s p %f r %f f1 %f iou %f' % (
+        image, case_name = sampled_batch['image'], sampled_batch['case_name'][0]
+        
+        if has_annotations:
+            label = sampled_batch['label']
+            metric_i = test_single_volume(image, label, model, classes=args.num_classes, multimask_output=multimask_output,
+                                          patch_size=[args.img_size, args.img_size], input_size=[args.input_size, args.input_size],
+                                          test_save_path=test_save_path, case=case_name)
+            metric_list += np.array(metric_i)
+            logging.info('idx %d case %s p %f r %f f1 %f iou %f' % (
             i_batch, case_name, np.mean(metric_i, axis=0)[0], np.mean(metric_i, axis=0)[1], np.mean(metric_i, axis=0)[2], np.mean(metric_i, axis=0)[3]))
-    metric_list = metric_list / len(db_test)
-    for i in range(1, args.num_classes + 1):
-        try:
-            logging.info('Mean class %d name %s p %f r %f f1 %f iou %f' % (i, class_to_name[i], metric_list[i - 1][0], metric_list[i - 1][1], metric_list[i - 1][2], metric_list[i - 1][3]))
-        except:
-            logging.info('Mean class %d p %f r %f f1 %f iou %f' % (i, metric_list[i - 1][0], metric_list[i - 1][1], metric_list[i - 1][2], metric_list[i - 1][3]))
-    p = np.mean(metric_list, axis=0)[0]
-    r = np.mean(metric_list, axis=0)[1]
-    f1 = np.mean(metric_list, axis=0)[2]
-    iou = np.mean(metric_list, axis=0)[3]
-    logging.info('Testing performance in best val model: p : %f r : %f f1 : %f iou : %f' % (p, r, f1, iou))
+        else:
+            test_single_volume(image, None, model, classes=args.num_classes, multimask_output=multimask_output,
+                              patch_size=[args.img_size, args.img_size], input_size=[args.input_size, args.input_size],
+                              test_save_path=test_save_path, case=case_name)
+            logging.info('idx %d case %s - inference only (no annotations)' % (i_batch, case_name))
+    
+    if has_annotations:
+        metric_list = metric_list / len(db_test)
+        for i in range(1, args.num_classes + 1):
+            try:
+                logging.info('Mean class %d name %s p %f r %f f1 %f iou %f' % (i, class_to_name[i], metric_list[i - 1][0], metric_list[i - 1][1], metric_list[i - 1][2], metric_list[i - 1][3]))
+            except:
+                logging.info('Mean class %d p %f r %f f1 %f iou %f' % (i, metric_list[i - 1][0], metric_list[i - 1][1], metric_list[i - 1][2], metric_list[i - 1][3]))
+        p = np.mean(metric_list, axis=0)[0]
+        r = np.mean(metric_list, axis=0)[1]
+        f1 = np.mean(metric_list, axis=0)[2]
+        iou = np.mean(metric_list, axis=0)[3]
+        logging.info('Testing performance in best val model: p : %f r : %f f1 : %f iou : %f' % (p, r, f1, iou))        
     logging.info("Testing Finished!")
     return 1
 
@@ -73,6 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--vit_name', type=str, default='vit_b', help='Select one vit model')
     parser.add_argument('--rank', type=int, default=4, help='Rank for LoRA adaptation')
     parser.add_argument('--module', type=str, default='sam_dora_image_encoder')
+    parser.add_argument('--no_annotations', action='store_true', help='Use this flag if test data has no annotations')
 
     args = parser.parse_args()
 

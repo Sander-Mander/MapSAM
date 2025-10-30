@@ -66,22 +66,14 @@ if __name__ == "__main__":
     torch.cuda.manual_seed(args.seed)
     dataset_name = args.dataset
     dataset_config = {
-        'Siegfried': {
+        dataset_name: {
             'root_path': args.root_path,
             'num_classes': args.num_classes,
         }
     }
     args.is_pretrain = True
     args.exp = dataset_name + '_' + str(args.img_size)
-    snapshot_path = os.path.join(args.output, "{}".format(args.exp))
-    snapshot_path = snapshot_path + '_pretrain' if args.is_pretrain else snapshot_path
-    snapshot_path += '_' + args.vit_name
-    snapshot_path = snapshot_path + '_' + str(args.max_iterations)[
-                                          0:2] + 'k' if args.max_iterations != 30000 else snapshot_path
-    snapshot_path = snapshot_path + '_epo' + str(args.max_epochs) if args.max_epochs != 30 else snapshot_path
-    snapshot_path = snapshot_path + '_bs' + str(args.batch_size)
-    snapshot_path = snapshot_path + '_lr' + str(args.base_lr) if args.base_lr != 0.01 else snapshot_path
-    snapshot_path = snapshot_path + '_s' + str(args.seed) if args.seed != 1234 else snapshot_path
+    snapshot_path = os.path.join(args.output, f"{dataset_name}_cpt")
 
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
@@ -113,5 +105,5 @@ if __name__ == "__main__":
     with open(config_file, 'w') as f:
         f.writelines(config_items)
 
-    trainer = {'Siegfried': trainer_hm}
+    trainer = {dataset_name: trainer_hm}
     trainer[dataset_name](args, net, snapshot_path, multimask_output, low_res)
