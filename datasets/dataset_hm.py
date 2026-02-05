@@ -1,5 +1,6 @@
 import os
 import random
+import rasterio
 import cv2
 import h5py
 import numpy as np
@@ -43,7 +44,7 @@ class RandomGenerator(object):
             image, label = random_rotate(image, label)
         c, x, y = image.shape
         if x != self.output_size[0] or y != self.output_size[1]:
-            image = zoom(image, (1, self.output_size[0] / x, self.output_size[1] / y), order=3)  # why not 3?
+            image = zoom(image, (1, self.output_size[0] / x, self.output_size[1] / y), order=3)
             label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y), order=0)
         label_h, label_w = label.shape
         low_res_label = zoom(label, (self.low_res[0] / label_h, self.low_res[1] / label_w), order=0)
@@ -56,7 +57,7 @@ class RandomGenerator(object):
 
 class hm_dataset(Dataset):
     def __init__(self, base_dir, split, has_annotations=True, transform=None):
-        self.transform = transform  # using transform in torch!
+        self.transform = transform
         self.split = split
         self.has_annotations = has_annotations
         self.img_dir = os.path.join(base_dir, split)
@@ -68,19 +69,38 @@ class hm_dataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = os.path.join(self.img_dir, self.file_names[idx])
-        image = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-        image = np.transpose(image, (2, 0, 1)) / 255.0  # c,h,w
         
+        with rasterio.open(img_path) as src:
+            image = src.read()  # (C, H, W)
+            
+            if image.shape[0] > 3:
+                image = image[:3, :, :]
+        
+        image = np.transpose(image, (1, 2, 0))
+        
+        image = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
+        
+        image = image.astype(np.float32) / 255.0
+
+        image = np.transpose(image, (2, 0, 1))
+
         if self.has_annotations:
             label_path = os.path.join(self.label_dir, self.file_names[idx])
-            label = cv2.imread(label_path, cv2.IMREAD_UNCHANGED)
-            label = label/255
+
+            
+            with rasterio.open(label_path) as src:
+                label = src.read(1)  # (H, W)
+
+            label = (label > 0).astype(np.uint8)
+
+            label = cv2.resize(label, (224, 224), interpolation=cv2.INTER_NEAREST)
+
             sample = {'image': image, 'label': label}
         else:
             sample = {'image': image}
-            
+
         if self.transform:
             sample = self.transform(sample)
-            
+
         sample['case_name'] = self.file_names[idx][:-4]
         return sample
